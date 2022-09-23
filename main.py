@@ -1,53 +1,66 @@
 from flask import Flask, render_template, request, redirect, session, flash, url_for
-class Jogo:
-    
-    def __init__(self, nome, categoria, console):
-        self.nome = nome
-        self.categoria = categoria
-        self.console = console
 
-
-class Users:
-
-    def __init__(self, nome, nickname, senha):
-        self.nome = nome 
-        self.nickname = nickname
-        self.senha = senha
-
-jogo1 = Jogo('Tetris', 'Puzzle', 'Atari')
-jogo2 = Jogo('God of War', 'Rack on Slash', 'PS2')
-lista = [jogo1, jogo2]  
-
-usuario1 = Users('RobertoAntunes', 'Roh', 'alohomora')
-usuario2 = Users('RobertoSouza', 'Rohzin', 'pao')
-
-usuarios = {
-    usuario1.nickname : usuario1,
-    usuario2.nickname : usuario2
-    }
-
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'alura'
 
+db = SQLAlchemy(app)
+
+class Jogos(db.Model):
+    id = db.Column(db.Integer, primary_key = True, autoincrement = True)
+    nome = db.Column(db.String(50),nullable = False)
+    categoria = db.Column(db.String(40),nullable = False)
+    console = db.Column(db.String(20),nullable = False)
+
+    def __repr__ (self):
+        return '<Name %r' % self.nome
+
+class Usuarios(db.Model):
+    nickname = db.Column(db.String(8), primary_key = True)
+    nome = db.Column(db.String(20), nullable = False)
+    senha = db.Column(db.String(100), nullable = False)
+
+    def __repr__ (self):
+        return '<Name %r' % self.nome
+
+app.config['SQLALCHEMY_DATABASE_URI'] = \
+    '{SGBD}://{usuario}:{senha}@{servidor}/{database}'.format(
+    SGBD = 'mysql+mysqlconnector',
+    usuario = 'root',
+    senha = 'roberto1',
+    servidor = 'localhost',
+    database = 'jogoteca'
+)
+
 @app.route('/')
 def index(): 
+    lista = Jogos.query.order_by(Jogos.id)
     return render_template('index.html', titulo = 'Jogos', jogos=lista)
 
 @app.route('/novo')
 def novo():
-
     if 'usuario_logado' not in session or session['usuario_logado'] == None:
         return redirect(url_for('login', proxima = url_for('novo')))
     return render_template('novo.html', titulo = 'Criação Jogos')
 
-@app.route('/criar', methods= ['POST',])
+@app.route('/criar', methods = ['POST', ])
 def criar():
     nome = request.form['nome']
     categoria = request.form['categoria']
     console = request.form['console']
-    jogos = Jogo(nome, categoria, console)
-    lista.append(jogos)
+
+    jogo = Jogos.query.filter_by(nome=nome).first()
+
+    if jogo:
+        flash('jogo ja existe')
+        return redirect(url_for('index'))
+    
+    novo_jogo = Jogos(nome = nome, categoria = categoria, console = console)
+    db.session.add(novo_jogo)
+    db.session.commit()
+
+
     return redirect(url_for('index'))
  
 @app.route('/login')
@@ -57,9 +70,8 @@ def login():
 
 @app.route('/autenticar', methods = ['POST', ])
 def autenticar():
-
-    if request.form['usuario'] in usuarios:
-        usuario = usuarios[request.form['usuario']]
+    usuario = Usuarios.query.filter_by(nickname=request.form['usuario']).first()
+    if usuario:
         if request.form['senha'] == usuario.senha:
             session['usuario_logado'] = usuario.nickname
             flash('Bem Vindo %s' % usuario.nickname)
